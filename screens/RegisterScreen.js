@@ -22,10 +22,22 @@ export default function RegisterScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Validation functions
+  const isValidEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleRegister = async () => {
     // Validation
     if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    // Validate email
+    if (!isValidEmail(email.trim())) {
+      Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
@@ -66,7 +78,6 @@ export default function RegisterScreen({ navigation }) {
             {
               text: 'OK',
               onPress: () => {
-                // Navigate to sign in screen
                 navigation.navigate('SignIn');
               },
             },
@@ -133,23 +144,6 @@ export default function RegisterScreen({ navigation }) {
               Doctor
             </Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Google Sign Up Button */}
-        <TouchableOpacity style={styles.googleButton}>
-          <View style={styles.googleButtonContent}>
-            <View style={styles.googleIcon}>
-              <Text style={styles.googleG}>G</Text>
-            </View>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Separator */}
-        <View style={styles.separator}>
-          <View style={styles.separatorLine} />
-          <Text style={styles.separatorText}>or</Text>
-          <View style={styles.separatorLine} />
         </View>
 
         {/* Name Input */}
