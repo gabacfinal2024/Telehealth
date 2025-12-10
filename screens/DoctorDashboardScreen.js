@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,10 +14,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getUserProfile, getFormattedUserData } from '../services/authService';
 
 export default function DoctorDashboardScreen({ route, navigation }) {
   const doctorName = route?.params?.userName || 'Doctor';
   const doctorEmail = route?.params?.userEmail || 'doctor@telehealth.com';
+  const [profileData, setProfileData] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState('home');
   const [appointments, setAppointments] = useState([
@@ -49,6 +53,41 @@ export default function DoctorDashboardScreen({ route, navigation }) {
     emailAlerts: true,
     pushAlerts: true,
   });
+
+  // Fetch user profile on component mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        console.log('=== DOCTOR DASHBOARD: Fetching user profile ===');
+        setProfileLoading(true);
+        
+        // Try to get from AsyncStorage first
+        const storedUser = await AsyncStorage.getItem('user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          console.log('=== DOCTOR DASHBOARD: User data from storage ===', parsedUser);
+          setProfileData(parsedUser);
+        }
+        
+        // Fetch fresh profile from API
+        const profile = await getUserProfile();
+        if (profile) {
+          console.log('=== DOCTOR DASHBOARD: Profile fetched from API ===', profile);
+          const formattedData = await getFormattedUserData();
+          if (formattedData) {
+            setProfileData(formattedData);
+            await AsyncStorage.setItem('user', JSON.stringify(formattedData));
+          }
+        }
+      } catch (error) {
+        console.error('=== DOCTOR DASHBOARD: Error fetching profile ===', error);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    
+    fetchProfile();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -90,8 +129,13 @@ export default function DoctorDashboardScreen({ route, navigation }) {
         <LinearGradient colors={['#9C27B0', '#E91E63']} style={styles.headerCard}>
           <View>
             <Text style={styles.welcome}>Welcome back,</Text>
-            <Text style={styles.doctorName}>{doctorName}</Text>
-            <Text style={styles.doctorEmail}>{doctorEmail}</Text>
+            <Text style={styles.doctorName}>
+              {profileData?.firstName ? profileData.firstName : doctorName}
+            </Text>
+            <Text style={styles.doctorEmail}>
+              {profileData?.email || doctorEmail}
+              {profileData?.id_number && ` • ID: ${profileData.id_number}`}
+            </Text>
           </View>
           <Ionicons name="medkit" size={48} color="#FFF" />
         </LinearGradient>

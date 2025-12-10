@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getUserProfile, getFormattedUserData } from '../services/authService';
 
 const { width } = Dimensions.get('window');
 
@@ -24,6 +26,8 @@ export default function DashboardScreen({ route, navigation }) {
   const userEmail = route?.params?.userEmail || 'user@telehealth.com';
   const userType = route?.params?.userType || 'Patient';
   const [menuVisible, setMenuVisible] = useState(false);
+  const [profileData, setProfileData] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [activeMenu, setActiveMenu] = useState('Dashboard');
   const [healthPoints, setHealthPoints] = useState(1500);
   const [currentView, setCurrentView] = useState('dashboard');
@@ -115,6 +119,62 @@ export default function DashboardScreen({ route, navigation }) {
       ],
     });
   }, []);
+
+  // Fetch user profile on component mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        console.log('=== DASHBOARD: Fetching user profile ===');
+        setProfileLoading(true);
+        
+        // Try to get from AsyncStorage first
+        const storedUser = await AsyncStorage.getItem('user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          console.log('=== DASHBOARD: User data from storage ===', parsedUser);
+          setProfileData(parsedUser);
+        }
+        
+        // Fetch fresh profile from API
+        const profile = await getUserProfile();
+        if (profile) {
+          console.log('=== DASHBOARD: Profile fetched from API ===', profile);
+          const formattedData = await getFormattedUserData();
+          if (formattedData) {
+            setProfileData(formattedData);
+            await AsyncStorage.setItem('user', JSON.stringify(formattedData));
+          }
+        }
+      } catch (error) {
+        console.error('=== DASHBOARD: Error fetching profile ===', error);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    
+    fetchProfile();
+  }, []);
+
+  // Fetch profile when profile modal opens
+  useEffect(() => {
+    if (selectedModal === 'profile') {
+      const refreshProfile = async () => {
+        try {
+          console.log('=== DASHBOARD: Refreshing profile data ===');
+          const profile = await getUserProfile();
+          if (profile) {
+            const formattedData = await getFormattedUserData();
+            if (formattedData) {
+              setProfileData(formattedData);
+            }
+          }
+        } catch (error) {
+          console.error('=== DASHBOARD: Error refreshing profile ===', error);
+        }
+      };
+      refreshProfile();
+    }
+  }, [selectedModal]);
 
   const [doctors] = useState([
     { id: 1, name: 'Dr. Sarah Smith', specialty: 'Cardiology', price: 100, rating: 4.8, status: 'Available', statusColor: '#4CAF50', experience: '15 years', patients: 2500 },
@@ -1007,6 +1067,25 @@ export default function DashboardScreen({ route, navigation }) {
         );
       
       case 'profile':
+        // Get real data from API - check both camelCase (formatted) and snake_case (raw API)
+        const firstName = profileData?.firstName || profileData?.first_name || '';
+        const middleName = profileData?.middleName || profileData?.middle_name || '';
+        const lastName = profileData?.lastName || profileData?.last_name || '';
+        const realEmail = profileData?.email || userEmail;
+        const realUserType = profileData?.userType || profileData?.user_type || userType;
+        const idNumber = profileData?.id_number || profileData?.idNumber || 'N/A';
+        
+        // Build full name from real API data
+        const fullName = firstName && lastName 
+          ? `${firstName}${middleName ? ' ' + middleName + ' ' : ' '}${lastName}`.trim()
+          : userName;
+        
+        console.log('=== PROFILE TAB: Displaying User Data ===');
+        console.log('Full Name:', fullName);
+        console.log('Email:', realEmail);
+        console.log('User Type:', realUserType);
+        console.log('ID Number:', idNumber);
+        
         return (
           <ScrollView style={styles.modalContent}>
             <Text style={styles.modalTitle}>Profile</Text>
@@ -1014,25 +1093,68 @@ export default function DashboardScreen({ route, navigation }) {
               <View style={styles.profileIcon}>
                 <Ionicons name="person" size={50} color="#E91E63" />
               </View>
-              <Text style={styles.profileName}>{userName}</Text>
-              <Text style={styles.profileEmail}>{userEmail}</Text>
-              <Text style={styles.profileType}>{userType}</Text>
+              <Text style={styles.profileName}>{fullName}</Text>
+              <Text style={styles.profileEmail}>{realEmail}</Text>
+              <Text style={styles.profileType}>{realUserType}</Text>
             </View>
+            
+            <View style={styles.profileSection}>
+              <Text style={styles.profileSectionTitle}>Personal Information</Text>
+              {firstName ? (
+                <View style={styles.profileItem}>
+                  <Text style={styles.profileLabel}>First Name</Text>
+                  <Text style={styles.profileValue}>{firstName}</Text>
+                </View>
+              ) : (
+                <View style={styles.profileItem}>
+                  <Text style={styles.profileLabel}>First Name</Text>
+                  <Text style={[styles.profileValue, { color: '#999', fontStyle: 'italic' }]}>Not available</Text>
+                </View>
+              )}
+              {middleName ? (
+                <View style={styles.profileItem}>
+                  <Text style={styles.profileLabel}>Middle Name</Text>
+                  <Text style={styles.profileValue}>{middleName}</Text>
+                </View>
+              ) : null}
+              {lastName ? (
+                <View style={styles.profileItem}>
+                  <Text style={styles.profileLabel}>Last Name</Text>
+                  <Text style={styles.profileValue}>{lastName}</Text>
+                </View>
+              ) : (
+                <View style={styles.profileItem}>
+                  <Text style={styles.profileLabel}>Last Name</Text>
+                  <Text style={[styles.profileValue, { color: '#999', fontStyle: 'italic' }]}>Not available</Text>
+                </View>
+              )}
+              <View style={styles.profileItem}>
+                <Text style={styles.profileLabel}>ID Number</Text>
+                <Text style={styles.profileValue}>{idNumber}</Text>
+              </View>
+            </View>
+
             <View style={styles.profileSection}>
               <Text style={styles.profileSectionTitle}>Account Information</Text>
               <View style={styles.profileItem}>
                 <Text style={styles.profileLabel}>Email</Text>
-                <Text style={styles.profileValue}>{userEmail}</Text>
+                <Text style={styles.profileValue}>{realEmail}</Text>
               </View>
               <View style={styles.profileItem}>
                 <Text style={styles.profileLabel}>User Type</Text>
-                <Text style={styles.profileValue}>{userType}</Text>
+                <Text style={styles.profileValue}>{realUserType}</Text>
               </View>
               <View style={styles.profileItem}>
                 <Text style={styles.profileLabel}>Health Points</Text>
                 <Text style={styles.profileValue}>{healthPoints} points</Text>
               </View>
             </View>
+
+            {profileLoading && (
+              <View style={styles.profileSection}>
+                <Text style={styles.profileSectionTitle}>Loading profile data...</Text>
+              </View>
+            )}
           </ScrollView>
         );
       
@@ -1405,8 +1527,13 @@ export default function DashboardScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
         
-        <Text style={styles.welcomeText}>Welcome back, {userName}</Text>
-        <Text style={styles.userTypeText}>{userType}</Text>
+        <Text style={styles.welcomeText}>
+          Welcome back, {profileData?.firstName || profileData?.first_name || userName}
+        </Text>
+        <Text style={styles.userTypeText}>
+          {profileData?.userType || profileData?.user_type || userType}
+          {(profileData?.id_number || profileData?.idNumber) && ` • ID: ${profileData?.id_number || profileData?.idNumber}`}
+        </Text>
         
         {/* Health Points Card */}
         <View style={styles.healthPointsCard}>
@@ -1530,8 +1657,15 @@ export default function DashboardScreen({ route, navigation }) {
             </ScrollView>
 
             <View style={styles.menuFooter}>
-              <Text style={styles.menuUserName}>{userName}</Text>
-              <Text style={styles.menuUserEmail}>{userEmail}</Text>
+              <Text style={styles.menuUserName}>
+                {profileData?.firstName || profileData?.first_name || userName}
+                {profileData?.lastName || profileData?.last_name 
+                  ? ` ${profileData?.lastName || profileData?.last_name}` 
+                  : ''}
+              </Text>
+              <Text style={styles.menuUserEmail}>
+                {profileData?.email || userEmail}
+              </Text>
               <TouchableOpacity 
                 style={styles.menuLogoutButton}
                 onPress={handleLogout}
