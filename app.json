@@ -5,9 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "splash": {
       "backgroundColor": "#ffffff",
-      "resizeMode": "contain"
+      "resizeMode": "contain",
+      "image": "./assets/icon.png"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -18,6 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.telehealth.app"
@@ -28,6 +31,11 @@
     "scheme": "telehealth",
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "406b9bbb-8479-4721-8ec0-0296e826b11f"
+      }
+    }
   }
 }

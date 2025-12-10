@@ -12,47 +12,71 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../http.ts';
 
 export default function SignInScreen({ navigation }) {
   const [userType, setUserType] = useState('Patient');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [credentials, setCredentials] = useState({ id_number: '', password: '' });
   const [loading, setLoading] = useState(false);
 
   const handleSignIn = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!credentials.id_number || !credentials.password) {
+      Alert.alert('Error', 'Please enter ID number and password');
       return;
     }
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
+      // Login
+      const response = await api.post('auth/token/login/', credentials);
+      const token = response.data?.auth_token;
+      if (!token) throw new Error('Invalid credentials');
+
+      await AsyncStorage.setItem('auth_token', token);
+
+      // Fetch profile
+      const profileResp = await api.get('auth/user/me/', {
+        headers: { Authorization: 'Token ' + token },
       });
 
-      if (error) {
-        Alert.alert('Sign In Error', error.message);
+      const userData = {
+        firstName: profileResp.data?.first_name || '',
+        middleName: profileResp.data?.middle_name || '',
+        lastName: profileResp.data?.last_name || '',
+        email: profileResp.data?.email || '',
+        userType: profileResp.data?.user_type || 'Patient',
+      };
+
+      await AsyncStorage.setItem('user', JSON.stringify(userData));
+
+      // Enforce portal
+      if (userData.userType !== userType) {
+        await AsyncStorage.removeItem('auth_token');
+        Alert.alert(
+          'Wrong account type',
+          `This account is registered as ${userData.userType}. Please switch to the ${userData.userType} tab to sign in.`
+        );
         setLoading(false);
         return;
       }
 
-      if (data.user) {
-        // Get user metadata if available
-        const userName = data.user.user_metadata?.full_name || email.split('@')[0];
-        const userTypeFromMeta = data.user.user_metadata?.user_type || userType;
-        
+      if (userData.userType === 'Doctor') {
+        navigation.replace('DoctorDashboard', {
+          userName: `${userData.firstName} ${userData.lastName}`.trim() || 'Doctor',
+          userEmail: userData.email,
+          userType: userData.userType,
+        });
+      } else {
         navigation.replace('Dashboard', {
-          userName: userName,
-          userEmail: data.user.email,
-          userType: userTypeFromMeta,
+          userName: `${userData.firstName} ${userData.lastName}`.trim() || 'Patient',
+          userEmail: userData.email,
+          userType: userData.userType,
         });
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-      console.error('Sign in error:', error);
+      console.error('Login error:', error.response?.data || error.message);
+      Alert.alert('Error', 'Login failed. Check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -112,33 +136,16 @@ export default function SignInScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Google Sign In Button */}
-        <TouchableOpacity style={styles.googleButton}>
-          <View style={styles.googleButtonContent}>
-            <View style={styles.googleIcon}>
-              <Text style={styles.googleG}>G</Text>
-            </View>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Separator */}
-        <View style={styles.separator}>
-          <View style={styles.separatorLine} />
-          <Text style={styles.separatorText}>or</Text>
-          <View style={styles.separatorLine} />
-        </View>
-
-        {/* Email Input */}
+        {/* ID Number Input */}
         <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Email</Text>
+          <Text style={styles.inputLabel}>ID Number</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter your email"
+            placeholder="Enter your ID number"
             placeholderTextColor="#999"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
+            value={credentials.id_number}
+            onChangeText={(text) => setCredentials({ ...credentials, id_number: text })}
+            keyboardType="default"
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -151,8 +158,8 @@ export default function SignInScreen({ navigation }) {
             style={styles.input}
             placeholder="Enter your password"
             placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
+            value={credentials.password}
+            onChangeText={(text) => setCredentials({ ...credentials, password: text })}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
